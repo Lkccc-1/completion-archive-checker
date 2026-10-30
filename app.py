@@ -217,9 +217,10 @@ def _builtin_template_path() -> Path | None:
     direct = BASE_DIR / "电网建设项目、设备仪器类分类、归档范围及保管期限表.docx"
     if direct.exists():
         return direct
-    for candidate in BASE_DIR.glob("*分类、归档范围及保管期限表.docx"):
-        if candidate.is_file() and not candidate.name.startswith("~$"):
-            return candidate
+    for pattern in ("*分类、归档范围及保管期限表.docx", "*归档范围示例*.docx"):
+        for candidate in sorted(BASE_DIR.glob(pattern)):
+            if candidate.is_file() and not candidate.name.startswith("~$"):
+                return candidate
     return None
 
 
@@ -297,7 +298,10 @@ def _sample_dirs() -> list[str]:
             item.name
             for item in BASE_DIR.iterdir()
             if item.is_dir()
-            and not item.name.startswith((".", "~", "core", "ui", "tests", "data", "checkpoints"))
+            and not item.name.startswith(
+                (".", "~", "core", "ui", "tests", "data", "checkpoints",
+                 "pages", "评测", "工具", "public", "docs")
+            )
         )
     except OSError:
         return []
