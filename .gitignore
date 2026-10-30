@@ -1,0 +1,18 @@
+# 运行产物
+data/
+*.xlsx
+~$*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器
+.vscode/
+.idea/
+
+# 内部资料（永不提交）
+*.docx
+*.doc

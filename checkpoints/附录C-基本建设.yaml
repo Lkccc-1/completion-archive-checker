@@ -1,0 +1,240 @@
+# ============================================================
+# T1-02 竣工资料完整性检查器 · 检查点配置（M1 的输入）
+# 依据：某省级电网公司电网建设项目档案业务指导书
+#       2024-09-30 施行版 · 附录C · 第 21 页
+# 范围：8 基本建设 / 80 综合 / 81 调度自动化、通信 / 810–812
+# 说明：只写「没有就过不了验收」的条目；新增条目不改代码。
+# ============================================================
+
+schema_version: 1
+
+profile:
+  id: gdcsg-appendix-c-8xx
+  name: 某省级电网公司基建档案检查点（8 基本建设）
+  source:
+    doc: 某省级电网公司电网建设项目档案业务指导书
+    edition: 2024-09-30
+    section: 附录C
+    page: 21
+  project_type: 调度自动化、通信   # 82 交流输电线路用同一套结构，换 groups 即可，不改 schema
+
+# ---------- 全局默认值：条目没写的字段就用这里 ----------
+defaults:
+  required: true                  # 缺项判定：true=缺了就报
+  extensions: [pdf, docx, doc, xlsx, xls, jpg, jpeg, png]
+  severity: 高                    # 高=必须整改；中=建议整改
+  match:
+    mode: any                     # any=命中任意一个关键词即算候选
+    min_confidence: 0.6           # 低于此值不判缺项，只提示「疑似未识别」
+
+# ---------- 分组 ----------
+groups:
+
+  # ================= 810 项目准备 =================
+  - code: "810"
+    name: 项目准备
+    owner: 建设
+    retention: 永久
+    expected_path: ["810 项目准备"]
+
+    items:
+      - id: C810-01-01
+        name: 项目核准批复、请示、报告
+        sub: 01 前期管理
+        match:
+          filename_any: [项目核准, 核准批复, 核准请示]
+          homepage_any: [核准批复, 核准请示]
+        checks:
+          - type: exists
+          - type: placed_in
+            path: 810 项目准备/01 前期管理
+          - type: sealed                     # 漏签：首页要有建设单位公章
+            where: 首页
+            expect: [建设单位公章]
+            confidence: 低                     # 只做「有无红色区域」，必须标低置信
+
+      - id: C810-01-02
+        name: 项目核准前期工作文件（协调文件、往来文件、报关等）
+        sub: 01 前期管理
+        match:
+          filename_any: [前期工作文件, 协调文件, 往来文件]
+
+      - id: C810-02-01
+        name: 可行性研究报告及请示文件
+        sub: 02 可行性研究
+        match:
+          filename_any: [可行性研究报告, 可研报告]
+
+      - id: C810-02-02
+        name: 可行性研究报告批复或评审意见
+        sub: 02 可行性研究
+        match:
+          filename_any: [可研批复, 可行性研究批复, 评审意见]
+
+      - id: C810-03-01
+        name: 招标准备文件（招标委托函、评标办法、招标文件、补遗答疑等）
+        sub: 03 招投标文件、合同、协议
+        owner: 投标
+        retention: 30年
+        match:
+          filename_any: [招标文件, 招标公告, 评标办法, 招标补遗, 资格预审]
+
+      - id: C810-03-02
+        name: 投标文件（投标书、报价表、澄清函）
+        sub: 03 招投标文件、合同、协议
+        owner: 投标
+        retention: 30年
+        match:
+          filename_any: [投标文件, 投标书, 投标报价]
+
+      - id: C810-03-03
+        name: 开标、评标过程文件（开标一览表、评标报告、定标文件、中标通知书）
+        sub: 03 招投标文件、合同、协议
+        owner: 投标
+        retention: 30年
+        match:
+          filename_any: [开标一览表, 评标报告, 定标, 中标通知书]
+
+      - id: C810-03-04
+        name: 合同及合同相关文件（审批、变更、索赔、了结、台帐）
+        sub: 03 招投标文件、合同、协议
+        owner: 建设
+        retention: 30年
+        match:
+          filename_any: [合同, 协议书]
+          filename_exclude: [监理合同]        # 监理合同归 816，避免错判
+        checks:
+          - type: exists
+          - type: date_order                 # 过期/时序：合同签订日期不得晚于开工日期
+            field: 合同签订日期
+            op: "<="
+            ref: 开工日期
+            note: 阈值待与业务确认后锁死
+
+  # ================= 811 项目设计 =================
+  - code: "811"
+    name: 项目设计
+    owner: 设计
+    expected_path: ["811 项目设计"]
+
+    items:
+      - id: C811-01-01
+        name: 初步设计审查意见、请示及批复
+        sub: 01 初步设计
+        retention: 永久
+        match:
+          filename_any: [初步设计审查, 初设审查, 初设批复]
+
+      - id: C811-01-02
+        name: 初步设计图纸、说明书、材料清册
+        sub: 01 初步设计
+        retention: 永久
+        match:
+          filename_any: [初步设计图纸, 初设说明书, 材料清册]
+
+      - id: C811-02-01
+        name: 施工图预算书、审查后预算书及批复
+        sub: 02 施工图设计
+        retention: 30年
+        match:
+          filename_any: [施工图预算, 预算书, 预算批复]
+
+      - id: C811-02-02
+        name: 施工图审查会会议纪要、施工图设计交底
+        sub: 02 施工图设计
+        retention: 30年
+        match:
+          filename_any: [施工图审查, 图纸会审, 设计交底]
+
+      - id: C811-03-01
+        name: 设计变更通知单汇总表（与竣工图对应一览表）
+        sub: 03 设计变更及工程联系单
+        retention: 永久
+        match:
+          filename_any: [设计变更通知单汇总, 设计变更汇总]
+
+      - id: C811-03-02
+        name: 设计变更通知单
+        sub: 03 设计变更及工程联系单
+        retention: 永久
+        match:
+          filename_any: [设计变更通知单]
+          filename_exclude: [汇总表]          # 汇总表是上一条，别重复计数
+
+  # ================= 812 项目管理 =================
+  - code: "812"
+    name: 项目管理
+    owner: 建设
+    expected_path: ["812 项目管理"]
+
+    items:
+      - id: C812-01-01
+        name: 工程管理组织机构请示、批复、通知、决定
+        sub: 01 建设管理
+        retention: 30年
+        match:
+          filename_any: [组织机构, 项目部成立, 管理人员任命]
+
+      - id: C812-01-02
+        name: 工程进度网络计划、工程节点（里程碑）、进度计划调整
+        sub: 01 建设管理
+        retention: 30年
+        match:
+          filename_any: [进度计划, 网络计划, 里程碑]
+
+      - id: C812-02-01
+        name: 一级、二级档案交底记录
+        sub: 02 档案管理
+        retention: 10年
+        match:
+          filename_any: [档案交底, 交底记录]
+        checks:
+          - type: exists
+          - type: sealed
+            where: 首页
+            expect: [档案管理部门公章]
+            confidence: 低
+
+      - id: C812-02-02
+        name: 项目文件归档审查表
+        sub: 02 档案管理
+        retention: 10年
+        match:
+          filename_any: [归档审查表]
+
+      - id: C812-02-03
+        name: 立卷说明
+        sub: 02 档案管理
+        retention: 10年
+        match:
+          filename_any: [立卷说明, 案卷说明]
+
+      - id: C812-03-01
+        name: 质量监督申报书
+        sub: 03 质量监督
+        owner: 质监
+        retention: 永久
+        match:
+          filename_any: [质量监督申报, 质监申报]
+
+      - id: C812-03-02
+        name: 工程总体质量监督报告
+        sub: 03 质量监督
+        retention: 永久
+        match:
+          filename_any: [质量监督报告, 质监报告]
+
+# ---------- 规则类型 → 问题类型（检查引擎的映射表） ----------
+issue_types:
+  exists: 缺项
+  placed_in: 错放
+  sealed: 漏签
+  signed: 漏签
+  date_order: 过期
+  date_within: 过期
+
+# ---------- 人工纠正的落盘文件（M5 写，M3 读） ----------
+overrides:
+  file: overrides.csv
+  columns: [文件相对路径, 原分类, 纠正后分类, 纠正人, 时间]
+  effect: 下次同文件名（同名归一化后）直接采用纠正结果
