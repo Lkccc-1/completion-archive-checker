@@ -109,11 +109,35 @@ def build_docx() -> None:
     doc.save(str(DOCX))
 
 
+# 印章三档要能演示出来，样本里必须有三种页面：
+#   有章（红圈）→ 检出印章；彩色页无红章 → 未见印章；纯黑白 → 不可判
+SEALED = {
+    "1.工程开工报审表及附件.pdf",
+    "2.施工组织设计报审表.pdf",
+    "2.基础工程质量验收记录.pdf",
+    "2.杆塔组立质量验收评级记录.pdf",
+    "1.杆塔明细表（竣工图）.pdf",
+    "3.竣工资料移交清单.pdf",
+}
+COLORED = {"2.占地协议.pdf", "3.导线开箱记录.pdf"}
+
+
 def make_pdf(path: Path, title: str) -> None:
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 96), title, fontname="china-s", fontsize=16)
     page.insert_text((72, 130), "示例工程 · 合成数据，仅用于演示", fontname="china-s", fontsize=10)
+
+    if path.name in SEALED:
+        # 4cm 圆章的尺寸量级：半径约 2cm、线宽 6pt、章内带红字
+        centre, radius = fitz.Point(430, 690), 57
+        page.draw_circle(centre, radius, color=(0.85, 0.1, 0.12), width=6)
+        page.insert_text((centre.x - 40, centre.y + 5), "DEMO SEAL",
+                         fontsize=11, color=(0.85, 0.1, 0.12))
+    elif path.name in COLORED:
+        # 有彩色但没红章：用来演示「彩色页面上未检出红色印章」
+        page.draw_rect(fitz.Rect(72, 60, 520, 90), color=None, fill=(0.12, 0.32, 0.62))
+
     doc.save(str(path))
     doc.close()
 
