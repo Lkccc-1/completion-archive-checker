@@ -175,8 +175,9 @@ def _rectification_sheet(wb: Workbook, report: CheckReport, due_date: str) -> No
     headers = [
         "序号", "分类号", "类目名称", "归档内容", "主要项目文件", "来源", "立卷",
         "保管期限", "状态", "缺失说明", "责任单位", "整改期限", "整改要求", "依据", "备注",
+        "LLM 意见", "LLM 原文引用",
     ]
-    widths = [6, 10, 14, 14, 46, 12, 12, 16, 10, 32, 10, 12, 30, 24, 18]
+    widths = [6, 10, 14, 14, 46, 12, 12, 16, 10, 32, 10, 12, 30, 24, 18, 12, 32]
     meta = report.meta
     unit = meta.get("unit", "")
     template = meta.get("template_name", "")
@@ -200,6 +201,8 @@ def _rectification_sheet(wb: Workbook, report: CheckReport, due_date: str) -> No
                 "请按归档范围补齐该类全部资料",
                 f"{template} · {gap.code}",
                 " > ".join(gap.path),
+                "",
+                "",
             ]
         )
 
@@ -223,6 +226,8 @@ def _rectification_sheet(wb: Workbook, report: CheckReport, due_date: str) -> No
                 f"请补充提供《{cp.text}》",
                 f"{template} · {cp.code} {cp.category}",
                 item.note,
+                item.llm_text if (item.llm_verdict or item.llm_error) else "",
+                item.llm_quote,
             ]
         )
 
@@ -245,8 +250,9 @@ def _suspect_sheet(wb: Workbook, report: CheckReport) -> None:
     headers = [
         "序号", "分类号", "类目名称", "归档内容", "主要项目文件", "来源", "立卷",
         "保管期限", "置信度", "候选文件", "候选分数", "正文分", "印章", "说明", "备注",
+        "LLM 意见", "LLM 理由", "LLM 原文引用",
     ]
-    widths = [6, 10, 14, 14, 46, 12, 12, 16, 8, 50, 8, 10, 16, 30, 20]
+    widths = [6, 10, 14, 14, 46, 12, 12, 16, 8, 50, 8, 10, 16, 30, 20, 12, 30, 32]
     rows = []
     for index, item in enumerate(
         [item for item in report.results if item.state == STATE_SUSPECT], start=1
@@ -260,6 +266,8 @@ def _suspect_sheet(wb: Workbook, report: CheckReport) -> None:
                 first.rel_path if first else "", f"{first.score:.2f}" if first else "",
                 item.content_text if item.content_pages else "", item.seal_text,
                 item.reason, item.note,
+                item.llm_text if (item.llm_verdict or item.llm_error) else "",
+                item.llm_reason, item.llm_quote,
             ]
         )
     if not rows:
@@ -460,6 +468,9 @@ def _notes_sheet(wb: Workbook, report: CheckReport) -> None:
         ("本期限制", limit),
         ("人工纠正", "疑似和缺项均可逐条改判为已提供/确认缺失/不适用；纠正结果按检查点编号落盘，"
                     "下次检查直接复用。"),
+        ("大模型复判", "可选步骤，只对疑似与缺项运行。结论仅作为建议列示，人工勾选采纳后才写入人工纠正；"
+                    "模型给出的原文引用必须能在正文摘录里逐字找到，找不到自动降级为「无法判断」。"
+                    "未运行复判时，本表 LLM 相关列留空。"),
         ("模版", f"{meta.get('template_name', '')}（hash: {meta.get('template_hash', '')[:16]}…）"),
         ("生成时间", meta.get("generated_at", "")),
     ]

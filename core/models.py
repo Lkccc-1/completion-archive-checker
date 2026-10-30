@@ -132,6 +132,13 @@ class MatchResult:
     seal_state: str = ""
     seal_pages: list[int] = field(default_factory=list)
     seal_count: int = 0
+    # 大模型复判：只是建议，人工采纳后才走 OverrideStore 改判
+    llm_verdict: str = ""
+    llm_reason: str = ""
+    llm_quote: str = ""
+    llm_confidence: float = 0.0
+    llm_cached: bool = False
+    llm_error: str = ""
 
     @property
     def evidence_text(self) -> str:
@@ -156,6 +163,19 @@ class MatchResult:
             return "未读正文"
         mark = "OCR" if self.content_ocr else "文字层"
         return f"{self.content_score:.2f}（{self.content_pages}页·{mark}）"
+
+    @property
+    def llm_text(self) -> str:
+        if not self.llm_verdict:
+            return "未复判" if not self.llm_error else "复判失败"
+        label = {"match": "建议已提供", "gap": "建议真缺", "unclear": "无法判断"}.get(
+            self.llm_verdict, "无法判断"
+        )
+        if self.llm_confidence:
+            label = f"{label}（{self.llm_confidence:.2f}）"
+        if self.llm_cached:
+            label += "·缓存"
+        return label
 
     @property
     def confidence(self) -> str:

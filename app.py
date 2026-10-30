@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -12,8 +13,24 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.content import distinguishing_terms
 from core.engine import check, content_available, detect_project_types, reapply_overrides
 from core.exporter import export_report
+from core.llm_judge import (
+    PRESETS,
+    JudgeRequest,
+    LLMConfig,
+    LLMJudge,
+    apply_verdict,
+    case_index,
+    case_list,
+    excerpt_for,
+    nearby_names,
+    override_entry,
+    related_folders,
+    related_names,
+)
+from core.pdf_reader import ContentReader
 from core.models import (
     DOC_TYPES,
     STATE_MATCHED,
@@ -389,6 +406,185 @@ def _section(title: str, step: str | None = None) -> None:
 
 
 # --------------------------------------------------------------------------
+# 大模型复判（只给建议，人工采纳后才改判）
+# --------------------------------------------------------------------------
+def _llm_targets(report: CheckReport | None) -> list:
+    if not report:
+        return []
+    return [
+        item
+        for item in report.results
+        if item.state in (STATE_SUSPECT, STATE_MISSING) and not item.manual
+    ]
+
+
+def _llm_items(report: CheckReport, files, root: str) -> list[tuple[str, JudgeRequest]]:
+    """给每条待复判条目准备输入：清单要求 + 候选文件 + 正文摘录 + 案卷索引。
+
+    实际提问在 `judge_request` 里分两段：先让模型指认案卷，再把那几卷的文件名摊开。
+    """
+    reader = None
+    if root:
+        try:
+            store_dir = project_dir(BASE_DIR, root)
+            reader = ContentReader(
+                use_ocr=True,
+                max_pages=2,
+                check_seal=False,
+                cache_path=store_dir / "content_cache.json",
+            )
+        except Exception:  # noqa: BLE001 - 读不到正文就只凭文件名复判
+            reader = None
+    gates = distinguishing_terms(report.results)
+    index, truncated = case_index(files)
+    cases, _ = case_list(files)
+    items = []
+    for item in _llm_targets(report):
+        excerpt = ""
+        if reader is not None and item.evidence:
+            rel = item.evidence[0].rel_path
+            try:
+                document = reader.read(Path(root) / rel, rel)
+                if not document.error:
+                    excerpt = excerpt_for(document.text)
+            except Exception:  # noqa: BLE001
+                excerpt = ""
+        nearby = nearby_names(item.checkpoint.code, files, limit=40)
+        key = f"{item.checkpoint.text}{item.checkpoint.archive_content}"
+        folders = related_folders(key, files)
+        items.append((
+            item.checkpoint.id,
+            JudgeRequest(
+                result=item,
+                excerpt=excerpt,
+                nearby=tuple(nearby),
+                related=tuple(related_names(key, files, limit=12)),
+                gate=gates.get(item.checkpoint.id, ""),
+                cases=tuple(cases),
+                cases_truncated=truncated,
+                case_map=index,
+                fallback_folders=tuple(folders),
+            ),
+        ))
+    if reader is not None:
+        try:
+            reader.save()
+        except Exception:  # noqa: BLE001
+            pass
+    return items
+
+
+def run_llm_judge(config: LLMConfig) -> None:
+    report = st.session_state.report
+    if not report:
+        return
+    root = st.session_state.scan_root or report.meta.get("root", "")
+    items = _llm_items(report, st.session_state.files, root)
+    if not items:
+        st.info("没有需要复判的疑似 / 缺失条目。")
+        return
+    try:
+        store_dir = project_dir(BASE_DIR, root) if root else BASE_DIR / "data"
+    except Exception:  # noqa: BLE001
+        store_dir = BASE_DIR / "data"
+    judge = LLMJudge(config, cache_path=store_dir / "llm_cache.json")
+    with st.spinner(f"正在复判 {len(items)} 条（并发 {config.workers}，失败不中断）…"):
+        verdicts = judge.judge_requests(items)
+    judge.save()
+
+    counts = {"match": 0, "gap": 0, "unclear": 0}
+    failed = 0
+    for item in _llm_targets(report):
+        verdict = verdicts.get(item.checkpoint.id)
+        if verdict is None:
+            continue
+        apply_verdict(item, verdict)
+        if verdict.error:
+            failed += 1
+        else:
+            counts[verdict.verdict] = counts.get(verdict.verdict, 0) + 1
+    st.session_state.report = report
+    st.session_state.export_bytes = None
+    st.toast(
+        f"复判完成：建议已提供 {counts['match']} / 建议真缺 {counts['gap']} / "
+        f"无法判断 {counts['unclear']} / 失败 {failed}；"
+        f"实调 {judge.calls} 次、命中缓存 {judge.hits} 次"
+    )
+
+
+def _apply_llm_preset() -> None:
+    preset = PRESETS.get(st.session_state.get("llm_provider", ""), PRESETS["自定义"])
+    if preset["base_url"]:
+        st.session_state.llm_base_url = preset["base_url"]
+        st.session_state.llm_model = preset["model"]
+        st.session_state.llm_style = preset["style"]
+
+
+def _render_llm_panel(results, key_prefix: str, store_path: str) -> None:
+    """疑似 / 缺失页签里的「采纳 LLM 建议」面板：逐条勾选，不提供一键全采纳。"""
+    hits = [item for item in results if item.llm_verdict in ("match", "gap")]
+    if not hits:
+        return
+    st.markdown("##### 大模型建议（勾选后点应用）")
+    st.caption(
+        "大模型只给建议：勾选＝采纳并走人工改判（可撤销、有日志）。"
+        "「建议已提供」会改判为已匹配，「建议真缺」会改判为确认缺失。"
+    )
+    options = {f"{item.checkpoint.code} {item.checkpoint.text}": item for item in hits}
+    frame = pd.DataFrame(
+        [
+            {
+                "采纳": False,
+                "条目": label,
+                "LLM 意见": item.llm_text,
+                "理由": item.llm_reason,
+                "原文引用": item.llm_quote,
+            }
+            for label, item in options.items()
+        ]
+    )
+    edited = st.data_editor(
+        frame,
+        hide_index=True,
+        width="stretch",
+        num_rows="fixed",
+        key=f"llm_{key_prefix}_" + hashlib.md5("|".join(options).encode("utf-8")).hexdigest()[:8],
+        column_config={
+            "采纳": st.column_config.CheckboxColumn("采纳", width="small"),
+            "条目": st.column_config.TextColumn("条目", disabled=True, width="medium"),
+            "LLM 意见": st.column_config.TextColumn("LLM 意见", disabled=True, width="small"),
+            "理由": st.column_config.TextColumn("理由", disabled=True, width="medium"),
+            "原文引用": st.column_config.TextColumn("原文引用", disabled=True, width="medium"),
+        },
+    )
+    if st.button("应用选中的建议", key=f"llm_apply_{key_prefix}"):
+        store = OverrideStore(store_path)
+        items = store.load()
+        report = st.session_state.report
+        chosen = 0
+        for _, row in edited.iterrows():
+            if not row.get("采纳"):
+                continue
+            target = options.get(str(row["条目"]))
+            if target is None:
+                continue
+            entry = override_entry(target, st.session_state.get("reviewer_input", ""))
+            if entry is None:
+                continue
+            items[target.checkpoint.id] = entry
+            chosen += 1
+        if chosen:
+            store.save(items, {"template_hash": report.meta.get("template_hash", "")})
+            st.session_state.overrides = store.load()
+            st.session_state.report = reapply_overrides(report, st.session_state.overrides)
+            st.session_state.export_bytes = None
+            st.toast(f"已采纳 {chosen} 条")
+            st.rerun()
+        else:
+            st.info("没有勾选任何条目。")
+
+
+# --------------------------------------------------------------------------
 # 侧边栏
 # --------------------------------------------------------------------------
 def render_sidebar() -> None:
@@ -650,6 +846,61 @@ def render_sidebar() -> None:
             elif content.get("error"):
                 st.warning(f"正文核查未执行：{content['error']}")
 
+        _section("大模型复判（可选）")
+
+        env = LLMConfig.from_env()
+        targets = _llm_targets(report)
+        st.selectbox(
+            "服务商",
+            list(PRESETS),
+            key="llm_provider",
+            on_change=_apply_llm_preset,
+            help="只在这一步联网；不点「③ 大模型复判」就不会发出任何请求。",
+        )
+        preset = PRESETS[st.session_state.get("llm_provider", "DeepSeek")]
+        for key, default in (
+            ("llm_base_url", env.base_url or preset["base_url"]),
+            ("llm_model", env.model or preset["model"]),
+            ("llm_api_key", env.api_key),
+            ("llm_style", env.style or preset["style"]),
+        ):
+            st.session_state.setdefault(key, default)
+        with st.expander("接口设置", expanded=not env.ready):
+            st.text_input("接口地址", key="llm_base_url")
+            st.text_input("模型", key="llm_model")
+            st.text_input(
+                "API Key",
+                key="llm_api_key",
+                type="password",
+                help="只存在当前会话里，不写进项目目录。也可以用环境变量 LLM_API_KEY / DEEPSEEK_API_KEY。",
+            )
+            st.radio(
+                "协议", ["openai", "anthropic"], key="llm_style", horizontal=True,
+                help="DeepSeek / 通义 / Ollama 用 openai；Claude 原生接口用 anthropic。",
+            )
+        config = LLMConfig(
+            base_url=st.session_state.llm_base_url,
+            model=st.session_state.llm_model,
+            api_key=st.session_state.llm_api_key,
+            style=st.session_state.llm_style,
+        )
+        if targets:
+            st.caption(
+                f"将复判 {len(targets)} 条（疑似 / 缺失），每条两段（先指认案卷、再核对文件名），"
+                f"输入约 {len(targets) * 3800 / 10000:.1f} 万 token（粗略估算）"
+            )
+        if not config.ready:
+            st.caption(f"还缺：{config.missing}")
+        if st.button(
+            "③ 大模型复判",
+            width="stretch",
+            disabled=not (config.ready and targets),
+        ):
+            try:
+                run_llm_judge(config)
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"复判失败：{exc}")
+
         _section("导出整改单", "4")
         inspector = st.text_input("检查人", key="inspector_input")
         reviewer = st.text_input("复核人", key="reviewer_input")
@@ -721,6 +972,7 @@ def _result_frame(results, choices: list[str]) -> pd.DataFrame:
                 "证据文件": _evidence_text(result),
                 "正文": result.content_text if result.content_pages else "",
                 "印章": result.seal_text,
+                "LLM 意见": result.llm_text if (result.llm_verdict or result.llm_error) else "",
                 "置信度": result.confidence,
                 "说明": result.reason,
                 "分类号": cp.code,
@@ -793,6 +1045,10 @@ def _render_editor(
             "正文": st.column_config.TextColumn("正文", disabled=True, width="small",
                                                 help="正文分 / 读取页数 / 来源"),
             "印章": st.column_config.TextColumn("印章", disabled=True, width="small"),
+            "LLM 意见": st.column_config.TextColumn(
+                "LLM 意见", disabled=True, width="small",
+                help="大模型复判结果，只是建议；勾选后点「应用选中的建议」才改判",
+            ),
             "置信度": st.column_config.TextColumn("置信度", disabled=True, width="small"),
             "说明": st.column_config.TextColumn("说明", disabled=True, width="medium"),
             "分类号": st.column_config.TextColumn("分类号", disabled=True, width="small"),
@@ -959,6 +1215,7 @@ def _render_report(report: CheckReport, template_set: CheckpointSet) -> None:
             code_filter = st.multiselect("按三级分类筛选", options=codes, key="missing_codes")
             results = _filtered_results(report, (STATE_MISSING,), keyword, code_filter)
             st.caption(f"共 {len(results)} 条")
+            _render_llm_panel(results, "missing", st.session_state.override_store_path)
             _render_editor(
                 report, results, MISSING_CHOICES, "missing",
                 st.session_state.override_store_path,
@@ -976,6 +1233,7 @@ def _render_report(report: CheckReport, template_set: CheckpointSet) -> None:
             code_filter = st.multiselect("按三级分类筛选", options=codes, key="suspect_codes")
             results = _filtered_results(report, (STATE_SUSPECT,), keyword, code_filter)
             st.caption(f"共 {len(results)} 条")
+            _render_llm_panel(results, "suspect", st.session_state.override_store_path)
             _render_editor(
                 report, results, SUSPECT_CHOICES, "suspect",
                 st.session_state.override_store_path,
