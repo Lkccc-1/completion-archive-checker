@@ -19,25 +19,25 @@ from core.renamer import (
 
 HEADER_DOC = """广东运峰电力安装有限公司文件
 运峰综〔2022］7号
-关于成立佛山220千伏项目A站扩建第三台
+关于成立某市220千伏变电站扩建第三台
 主变及其配套线路工程项目部暨任命王敬
 同志为项目经理的通知
 各部门：
-为更好地推进佛山220千伏项目A站扩建第三台主变及其配套线路工程顺利实施，经公司决议成立项目部。
+为更好地推进某市220千伏变电站扩建第三台主变及其配套线路工程顺利实施，经公司决议成立项目部。
 """
 
 TABLE_DOC = """表B.0.7
 施工单位体系认证报审/报验表
-工程名称：佛山220千伏项目A站扩建第三台主变及其配套线路工程
+工程名称：某市220千伏变电站扩建第三台主变及其配套线路工程
 编号：SD-030600WB23230001-000
 """
 
 WRAPPED_DOC = """广东运峰电力安装有限公司
-关于成立佛山220千伏项目A站扩建第三台主变
+关于成立某市220千伏变电站扩建第三台主变
 及其配套线路工程项目部及启用项目部印章的
 图
-某省级电网公司佛山供电局：
-由于工程施工需要，我公司决定成立佛山220千伏项目A站扩建第三台主变及其配套线路工程项目部。
+某省级电网公司某市供电局：
+由于工程施工需要，我公司决定成立某市220千伏变电站扩建第三台主变及其配套线路工程项目部。
 """
 
 # 南网《电网建设施工作业指导书》封面：抬头对每一份都一样，题目在“第X部分：”后面
@@ -82,7 +82,7 @@ DRAWING = """玉永甲#38
 平面图
 平断面图4（2A1~3A23）
 广东省建设工程勘察设计出图专用章
-单位名称：佛山电力设计院有限公司
+单位名称：某市电力设计院有限公司
 """
 
 
@@ -90,7 +90,7 @@ class TitleExtractionTests(unittest.TestCase):
     def test_red_header_title_merges_wrapped_lines(self):
         self.assertEqual(
             extract_title(HEADER_DOC),
-            "关于成立佛山220千伏项目A站扩建第三台主变及其配套线路工程项目部暨任命王敬同志为项目经理的通知",
+            "关于成立某市220千伏变电站扩建第三台主变及其配套线路工程项目部暨任命王敬同志为项目经理的通知",
         )
 
     def test_table_number_is_stripped(self):
@@ -101,7 +101,7 @@ class TitleExtractionTests(unittest.TestCase):
         self.assertEqual(extract_title(TABLE_DOC), "施工单位体系认证报审/报验表")
 
     def test_field_lines_are_skipped(self):
-        title = extract_title("工程名称：佛山220千伏项目A站扩建第三台主变及其配套线路工程\n安全技术交底")
+        title = extract_title("工程名称：某市220千伏变电站扩建第三台主变及其配套线路工程\n安全技术交底")
         self.assertEqual(title, "安全技术交底")
 
 
@@ -196,7 +196,7 @@ class ApplyAndUndoTests(unittest.TestCase):
         doc = Document()
         doc.add_paragraph("广东运峰电力安装有限公司")
         doc.add_paragraph("工程质量终身责任承诺书")
-        doc.add_paragraph("工程名称：佛山220千伏项目A站扩建第三台主变及其配套线路工程")
+        doc.add_paragraph("工程名称：某市220千伏变电站扩建第三台主变及其配套线路工程")
         doc.save(str(self.root / "abc.docx"))
         items = plan_folder(self.root, use_ocr=False)
         by_ext = {item.ext: item for item in items}

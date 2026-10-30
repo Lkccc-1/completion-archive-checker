@@ -16,7 +16,7 @@ def run_match(checkpoints, files, project_name="测试工程"):
 class MatcherTests(unittest.TestCase):
     def test_exact_name_matches(self):
         cp = make_checkpoint("混凝土试块报告及报审", archive="05施工用混凝土")
-        file = make_file("200243-8232-4 测试工程混凝土试块报告及报审表.pdf")
+        file = make_file("AY-8232-4 测试工程混凝土试块报告及报审表.pdf")
         _, results = run_match([cp], [file])
         self.assertEqual(results[0].state, STATE_MATCHED)
         self.assertGreaterEqual(results[0].score, Matcher.MATCH_THRESHOLD)
@@ -24,7 +24,7 @@ class MatcherTests(unittest.TestCase):
 
     def test_code_only_does_not_match(self):
         cp = make_checkpoint("钢筋出厂合格证", archive="09钢筋")
-        file = make_file("200243-8232-9 测试工程扫描件.pdf", codes=["8232"])
+        file = make_file("AY-8232-9 测试工程扫描件.pdf", codes=["8232"])
         _, results = run_match([cp], [file])
         self.assertNotEqual(results[0].state, STATE_MATCHED)
 
@@ -36,8 +36,8 @@ class MatcherTests(unittest.TestCase):
     def test_archive_context_disambiguates_duplicate_text(self):
         cp_cement = make_checkpoint("见证取样记录", archive="04水泥", seq=1)
         cp_sand = make_checkpoint("见证取样记录", archive="05施工用砂", seq=2)
-        f_cement = make_file("200243-8232-2 测试工程水泥见证取样记录.pdf")
-        f_sand = make_file("200243-8232-3 测试工程建筑用砂见证取样记录.pdf")
+        f_cement = make_file("AY-8232-2 测试工程水泥见证取样记录.pdf")
+        f_sand = make_file("AY-8232-3 测试工程建筑用砂见证取样记录.pdf")
         _, results = run_match([cp_cement, cp_sand], [f_cement, f_sand])
         self.assertEqual(results[0].state, STATE_MATCHED)
         self.assertEqual(results[1].state, STATE_MATCHED)
@@ -84,7 +84,7 @@ class MatcherTests(unittest.TestCase):
         )
         file = make_file(
             "AX-8230-1 成立文件、开工报告、验评划分表/"
-            "3.项目A（220kV输电线路工程）关于成立佛山220千伏项目A站扩建"
+            "3.项目A（220kV输电线路工程）关于成立某市220千伏变电站扩建"
             "第三台主变及其配套线路工程项目部及启用项目部印章的函.pdf"
         )
         _, results = run_match([cp], [file])
@@ -97,7 +97,7 @@ class MatcherTests(unittest.TestCase):
         file = make_file(
             "AX-8232-1 基础开工报告、施工方案、挖孔桩、掏挖、灌注桩、"
             "承台连梁质量验收记录表/"
-            "1. 220千伏项目A站扩建第三台主变及其配套线路工程分部工程开工报审表及开工报告.pdf"
+            "1. 220千伏变电站扩建第三台主变及其配套线路工程分部工程开工报审表及开工报告.pdf"
         )
         _, results = run_match([cp], [file])
         self.assertEqual(results[0].state, STATE_MATCHED)
@@ -108,7 +108,7 @@ class MatcherTests(unittest.TestCase):
         )
         file = make_file(
             "AX-8232-10 水泥、砂、碎石/"
-            "10、220千伏项目A站线路工程施工土建部分1A0-2A2塔基用水报告报审与取样记录、检测报告.pdf"
+            "10、220千伏变电站线路工程施工土建部分1A0-2A2塔基用水报告报审与取样记录、检测报告.pdf"
         )
         _, results = run_match([cp], [file])
         self.assertNotEqual(results[0].state, STATE_MATCHED)
@@ -121,9 +121,9 @@ class MatcherTests(unittest.TestCase):
             "项目部成立、公章启用文件", code="8230", archive="01工程开工及报审"
         )
         file = make_file(
-            "200243-8230-1 220千伏项目C甲乙线解口入孔堂（城南）站线路工程项目部成立、"
+            "AY-8230-1 220千伏项目C甲乙线解口入某站线路工程项目部成立、"
             "委员会成立、管理人员任命和启用章的函、开工报告/"
-            "3.220千伏项目C甲乙线解口入孔堂（城南）站线路工程关于项目管理人员任合书的"
+            "3.220千伏项目C甲乙线解口入某站线路工程关于项目管理人员任合书的"
             "通知和启用项目部印章的函.pdf"
         )
         _, results = run_match([cp], [file])
@@ -272,7 +272,7 @@ class MatcherTests(unittest.TestCase):
         )
         file = make_file(
             "AX-8232-11 砂、碎石、商混/"
-            "1.220千伏项目A站线路工程碎石使用跟踪记录表.pdf"
+            "1.220千伏变电站线路工程碎石使用跟踪记录表.pdf"
         )
         _, results = run_match([cp], [file])
         self.assertNotEqual(results[0].state, STATE_MATCHED)
@@ -283,7 +283,7 @@ class MatcherTests(unittest.TestCase):
             "开工报审及开工报告", code="8330", archive="01工程开工及报审"
         )
         file = make_file(
-            "AX-8230-1 成立文件、开工报告/6.220千伏项目A站线路工程开工报告及报审.pdf"
+            "AX-8230-1 成立文件、开工报告/6.220千伏变电站线路工程开工报告及报审.pdf"
         )
         matcher = Matcher([cp], project_name="测试工程", known_codes=["8230", "8330"])
         results = matcher.match([file])
@@ -291,7 +291,7 @@ class MatcherTests(unittest.TestCase):
 
     def test_subject_guard_blocks_generic_report_match(self):
         cp = make_checkpoint("地脚螺栓第三方试验报告及报审表", archive="08角钢、地脚螺栓")
-        file = make_file("200243-8232-9 测试工程钢筋原材料检测试验报告及报审表.pdf")
+        file = make_file("AY-8232-9 测试工程钢筋原材料检测试验报告及报审表.pdf")
         _, results = run_match([cp], [file])
         self.assertNotEqual(results[0].state, STATE_MATCHED)
         self.assertLess(results[0].score, Matcher.MATCH_THRESHOLD)
@@ -303,7 +303,7 @@ class MatcherTests(unittest.TestCase):
             for i, text in enumerate(texts)
         ]
         file = make_file(
-            "200243-8230-1 测试工程开工报告施工日志安全交底质量验收材料报审.pdf"
+            "AY-8230-1 测试工程开工报告施工日志安全交底质量验收材料报审.pdf"
         )
         _, results = run_match(cps, [file])
         self.assertTrue(any(item.shared for item in results))
@@ -313,14 +313,14 @@ class MatcherTests(unittest.TestCase):
     def test_evidence_is_capped_at_three(self):
         cp = make_checkpoint("开工报告")
         files = [
-            make_file(f"200243-8232-{i} 测试工程开工报告{i}.pdf") for i in range(1, 6)
+            make_file(f"AY-8232-{i} 测试工程开工报告{i}.pdf") for i in range(1, 6)
         ]
         _, results = run_match([cp], files)
         self.assertLessEqual(len(results[0].evidence), 3)
 
     def test_suspect_state_between_thresholds(self):
         cp = make_checkpoint("混凝土试块强度评定", archive="05施工用混凝土")
-        file = make_file("200243-8232-4 测试工程混凝土试块报告及报审表.pdf")
+        file = make_file("AY-8232-4 测试工程混凝土试块报告及报审表.pdf")
         _, results = run_match([cp], [file])
         self.assertIn(results[0].state, (STATE_SUSPECT, STATE_MISSING))
 
@@ -330,7 +330,7 @@ class MatcherTests(unittest.TestCase):
             archive="05施工用混凝土",
             exclude_terms=["用水"],
         )
-        file = make_file("200243-8232-4 测试工程混凝土用水试块报告及报审表.pdf")
+        file = make_file("AY-8232-4 测试工程混凝土用水试块报告及报审表.pdf")
         _, results = run_match([cp], [file])
         self.assertLess(results[0].score, Matcher.MATCH_THRESHOLD)
 

@@ -77,7 +77,7 @@ class DetectAndCheckTests(unittest.TestCase):
         cp2 = make_checkpoint("钢筋出厂合格证", archive="09钢筋", seq=2)
         cs = make_set([cp1, cp2])
         files = [
-            make_file("200243-8232-4 测试工程混凝土试块报告及报审表.pdf"),
+            make_file("AY-8232-4 测试工程混凝土试块报告及报审表.pdf"),
         ]
         report = check(cs, files, "8", "82", "施工", project_name="测试工程")
         self.assertEqual(report.stats["total"], 2)

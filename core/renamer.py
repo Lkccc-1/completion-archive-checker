@@ -210,7 +210,7 @@ _LEADING_VERBS = ("成立", "推进", "完成", "承担", "建设", "实施", "�
 
 
 def _strip_leading_verb(text: str, flat: str) -> str:
-    """“成立佛山…工程”里的“成立”是动词，不是工程名的一部分。"""
+    """“成立某市…工程”里的“成立”是动词，不是工程名的一部分。"""
     changed = True
     while changed:
         changed = False

@@ -27,9 +27,9 @@ class StripSerialTests(unittest.TestCase):
 
 class CodeTests(unittest.TestCase):
     def test_extracts_classification_codes(self):
-        codes = extract_codes("200243-8232-1 220千伏线路")
+        codes = extract_codes("AY-8232-1 220千伏线路")
         self.assertIn("8232", codes)
-        self.assertNotIn("200243", codes)
+        self.assertNotIn("AY", codes)
         self.assertIn("220", codes)
 
     def test_ignores_year(self):
