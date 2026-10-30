@@ -299,7 +299,7 @@ def _sample_dirs() -> list[str]:
             for item in BASE_DIR.iterdir()
             if item.is_dir()
             and not item.name.startswith(
-                (".", "~", "core", "ui", "tests", "data", "checkpoints",
+                (".", "~", "__pycache__", "core", "ui", "tests", "data", "checkpoints",
                  "pages", "评测", "工具", "public", "docs")
             )
         )
