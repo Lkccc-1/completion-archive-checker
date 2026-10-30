@@ -1039,6 +1039,19 @@ def _render_report(report: CheckReport, template_set: CheckpointSet) -> None:
             wanted = {"全部": None, "未见印章": "无", "不可判": "未知", "已检出": "有"}[choice]
             rows = [item for item in sealed if wanted is None or item.seal_state == wanted]
             st.caption(f"共 {len(rows)} 条")
+
+            def _seal_note(item) -> str:
+                """这一列只解释印章结论。
+
+                原来直接放 item.reason（匹配理由），既重复了「证据文件」已有的路径，
+                又会把单元格撑爆、右半句被裁掉。匹配理由在「已匹配 / 疑似待确认」页签里看。
+                """
+                if item.seal_state == "有":
+                    pages = "、".join(f"第{p}页" for p in item.seal_pages[:3]) or "—"
+                    return f"检出红色印章 {item.seal_count} 处（{pages}），只认红色"
+                if item.seal_state == "无":
+                    return "彩色页面上未检出红色印章，需开卷确认是否补盖"
+                return "黑白扫描件，红色印章无法判定"
             st.dataframe(
                 pd.DataFrame(
                     [
@@ -1051,7 +1064,7 @@ def _render_report(report: CheckReport, template_set: CheckpointSet) -> None:
                             "证据文件": (
                                 Path(item.evidence[0].rel_path).name if item.evidence else ""
                             ),
-                            "说明": item.reason,
+                            "说明": _seal_note(item),
                         }
                         for item in rows
                     ]
@@ -1059,6 +1072,15 @@ def _render_report(report: CheckReport, template_set: CheckpointSet) -> None:
                 hide_index=True,
                 width="stretch",
                 height=520,
+                column_config={
+                    "分类号": st.column_config.TextColumn(width=66),
+                    "类目名称": st.column_config.TextColumn(width=84),
+                    "主要项目文件": st.column_config.TextColumn(width=180),
+                    "印章": st.column_config.TextColumn(width=104),
+                    "检出页码": st.column_config.TextColumn(width=74),
+                    "证据文件": st.column_config.TextColumn(width=210),
+                    "说明": st.column_config.TextColumn(width=400),
+                },
             )
 
     with tabs[5]:
