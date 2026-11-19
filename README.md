@@ -57,6 +57,8 @@ python -m venv .venv
 pip install -r requirements.txt
 streamlit run app.py
 ```
+> 想精确复现作者环境：`pip install -r requirements.lock.txt`（锁定全部 57 个依赖的精确版本）。
+> 注意：lock 文件在 Windows + Python 3.12 生成，换平台请改用 `requirements.txt`。
 
 **Windows 用户也可以直接双击项目根目录的 `start.bat`**：它会切到项目目录、启动 Streamlit
 并自动打开浏览器；启动失败时窗口会停住显示错误，不会一闪而过。
